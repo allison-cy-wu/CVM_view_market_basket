@@ -1,8 +1,9 @@
-from lsg_view_market_basket.logger_config import configure_logger
+from division_view_market_basket.logger_config import configure_logger
 from connect2Databricks.update_model_master import update_model_master
-from lsg_view_market_basket.cvm_pre_processing import cvm_pre_processing
-from lsg_view_market_basket.cvm_pre_processing import pull_lsg_omni_history
+from division_view_market_basket.cvm_pre_processing import cvm_pre_processing
+# from market_basket.mb_run import mb_run
 import logging
+import pickle
 
 # create logger
 logger = logging.getLogger('CVM')
@@ -19,7 +20,12 @@ def cvm_pipeline(
 ):
 
     _, data = cvm_pre_processing(start_date, period, env)
-    data.show()
+    testData = data.take(1000)
+    with open('mb_run_test_data.pkl', 'wb') as f:
+        pickle.dump([testData], f)
+
+
+    # mb = mb_run(data)
 
     # output = run_market_basket(data)
     # master_id,  recs, formatted_recs = cvm_post_processing(output)
