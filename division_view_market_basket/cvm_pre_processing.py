@@ -108,7 +108,9 @@ def cvm_pre_processing(
             filter(col('coupon_count') > 1). \
             filter(col('prod_count') > 1)
 
-    df = df.join(sessions_that_matter, ['session_key'], how = 'inner')
+    df = df.join(sessions_that_matter, ['session_key'], how = 'inner').\
+        withColumnRenamed('session_key', 'basket_key')
+
     module_logger.info('===== cvm_pre_processing : END ======')
     return sessions_that_matter, df
 
