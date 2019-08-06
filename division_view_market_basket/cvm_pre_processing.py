@@ -5,7 +5,6 @@ from pyspark.sql.functions import split, explode
 from pyspark.sql.functions import col, ltrim, rtrim, coalesce, countDistinct
 from pyspark.sql.window import Window
 import pyspark.sql.functions as func
-from utility_functions.custom_errors import *
 import logging
 module_logger = logging.getLogger('CVM.cvm_pre_processing')
 
@@ -29,7 +28,8 @@ class PullOmniHistory:
 
         table_name = 'datalake_omni.omni_hit_data'
         dt_col_name = 'hit_time_gmt_dt_key'
-        bound_date_check(table_name, dt_col_name, start_date, str(int(end_date) - 1), self.env, 'YYYYMMDD', 'LSG')
+        _, bound_end_date = date_period(-1, end_date)
+        bound_date_check(table_name, dt_col_name, start_date, bound_end_date, self.env, 'YYYYMMDD', 'LSG')
 
         query = 'SELECT ' \
                 'VS.visit_session_key AS session_key, ' \
@@ -51,6 +51,7 @@ class PullOmniHistory:
 
         query = 'SELECT UPPER(sku_nbr) AS prod_id, size_grp AS coupon ' \
                 'FROM cdwds.f_web_prod_feature ' \
+                'WHERE size_grp IS NOT NULL ' \
                 'GROUP BY sku_nbr, size_grp'
 
         coupons = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
