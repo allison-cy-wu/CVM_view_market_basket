@@ -1,6 +1,6 @@
 from utility_functions.date_period import date_period, bound_date_check
 from utility_functions.benchmark import timer
-from utility_functions.databricks_uf import rdd_to_df
+from utility_functions.databricks_uf import collect_and_cache
 from utility_functions.custom_errors import *
 from connect2Databricks.read2Databricks import redshift_cdw_read
 from pyspark.sql.functions import split, explode, col, ltrim, rtrim, coalesce, countDistinct, broadcast
@@ -21,12 +21,12 @@ class MarketBasketPullHistory:
                  start_date: str,
                  period: int,
                  env: str,
+                 debug: bool = False,
                  ):
         self.start_date = start_date
         self.period = period
         self.env = env
-        self.prod_list = []
-        self.coupons = []
+        self.debug = debug
 
     def __repr__(self):
         return f'Pull history for {self.period} days from the {self.start_date} in {self.env} instance.'
@@ -59,6 +59,9 @@ class MarketBasketPullHistory:
             drop('prod_list'). \
             distinct()
 
+        if self.debug:
+            print(f'row count for df = {df.count()}')
+
         query = 'SELECT UPPER(sku_nbr) AS prod_id, size_grp AS coupon ' \
                 'FROM cdwds.f_web_prod_feature ' \
                 'WHERE size_grp IS NOT NULL ' \
@@ -70,16 +73,20 @@ class MarketBasketPullHistory:
             raise DataValidityError('No coupon information.  Please check the validity of size_grp column '
                                     'on cdwds.f_web_prod_feature.')
 
+        if self.debug:
+            print(f'row count for coupons = {coupons.count()}')
+
         coupons = coupons.\
             withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
         df = df.join(broadcast(coupons), ['prod_id'], how = 'left').\
-            withColumn('coupon', coalesce('coupon', 'prod_id'))
+            withColumn('coupon', coalesce('coupon', 'prod_id')).\
+            withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
         # TODO: write test to check the integrity of df
 
         prod_list = df.select('prod_id').distinct()
-        coupons = coupons.distinct()
+        coupons = df.select('prod_id', 'coupon', 'coupon_key').distinct()
 
         return df, prod_list, coupons
 
@@ -106,6 +113,7 @@ class MarketBasketPullHistory:
                 'UPPER(prod_prc_ref_sku) AS prod_id, sum(ext_net_sls_pmar_amt) AS sales ' \
                 'FROM cdwds.lsg_f_sls_invc ' \
                 f'WHERE invc_dt_key<{start_date} AND invc_dt_key>={end_date} ' \
+                'AND UPPER(prod_prc_ref_sku) IS NOT NULL ' \
                 f'GROUP BY UPPER(prod_prc_ref_sku)'
 
         sales = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
@@ -140,6 +148,7 @@ class MarketBasketPullHistory:
                 'UPPER(prod_prc_ref_sku) AS prod_id, sum(ext_net_sls_pmar_amt) AS sales ' \
                 'FROM cdwds.lsg_f_sls_invc ' \
                 f'WHERE invc_dt_key<{start_date} AND invc_dt_key>={end_date} ' \
+                f'and prod_prc_ref_sku IS NOT NULL ' \
                 f'GROUP BY UPPER(prod_prc_ref_sku)'
 
         sales = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
@@ -168,11 +177,12 @@ def cvm_pre_processing(
         period: int,
         env: str,
         division: str = 'LSG',
+        debug: bool = False,
 ):
-    module_logger.info(f'===== cvm_pre_processing for {division} in {env}: START ======')
+    module_logger.info(f'===== cvm_pre_processing for {division} in {env} : START ======')
     module_logger.info(f'===== cvm_pre_processing : start_date = {start_date} ======')
     module_logger.info(f'===== cvm_pre_processing : period = {period} days ======')
-    pull_history = MarketBasketPullHistory(start_date, period, env)
+    pull_history = MarketBasketPullHistory(start_date, period, env, debug = debug)
     if division == 'LSG':
         df, prod_list, coupons = pull_history.lsg_omni()
         sales = pull_history.lsg_sales(prod_list, coupons)
@@ -201,20 +211,16 @@ def cvm_pre_processing(
     df = df.join(broadcast(sessions_that_matter), ['session_key'], how = 'inner').\
         withColumnRenamed('session_key', 'basket_key')
 
+    module_logger.info('===== cvm_pre_processing : caching the pre-processed data ======')
+
+    # df = collect_and_cache(df)
+    # sales = collect_and_cache(sales)
+
     sales_count = sales.count()
     row_count = df.count()
 
     module_logger.info(f'===== cvm_pre_processing : total_row_count for df = {row_count} ======')
     module_logger.info(f'===== cvm_pre_processing : number of SKUs with sales = {sales_count} ======')
-
-    if 'local' in setting:
-        df = rdd_to_df(df.collect())
-        sales = rdd_to_df(sales.collect())
-
-    else:
-        df = df.cache()
-        sales = sales.cache()
-
     module_logger.info('===== cvm_pre_processing : END ======')
     return sessions_that_matter, sales, df
 
