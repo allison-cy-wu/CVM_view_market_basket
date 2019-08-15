@@ -2,7 +2,9 @@ from unittest import TestCase
 from utility_functions.databricks_uf import rdd_to_df
 from market_basket.mb_run import market_basket_sql, market_basket_stats
 from division_view_market_basket.cvm_pre_processing import MarketBasketPullHistory
+from division_view_market_basket.cvm_post_processing import CVMPostProcessing
 from pyspark.sql.functions import col, ltrim, rtrim, desc, countDistinct
+from connect2Databricks.spark_init import spark_init
 import pickle
 
 
@@ -59,7 +61,7 @@ class TestMarketBasketPullHistory(TestCase):
     def setUp(self):
         self.start_date = '20190710'
         self.period = -1
-        self.env = 'PRD'
+        self.env = 'TST'
         self.pull_history = MarketBasketPullHistory(self.start_date, self.period, self.env)
 
     def test_lsg_omni(self):
@@ -75,6 +77,54 @@ class TestMarketBasketPullHistory(TestCase):
 
         self.assertEqual(sales_check_1, 638580)
         self.assertEqual(sales_check_2, 7697)
+
+
+class TestCVMPostProcessing(TestCase):
+    def setUp(self):
+        if 'spark' not in locals():
+            print('Environment: Databricks-Connect')
+            spark, sqlContext, setting = spark_init()
+
+        sc = spark.sparkContext
+
+        self.start_date = '20190710'
+        self.period = -1
+        self.env = 'TST'
+        self.df = sc.pickleFile('post_processing_test_data_df.pkl').toDF()
+        self.sales = sc.pickleFile('post_processing_test_data_sales.pkl').toDF()
+        self.total_basket_count, self.coupon_views, self.matrix = market_basket_sql(self.df)
+
+        self.cvm_post = CVMPostProcessing(
+            sales = self.sales,
+            matrix = self.matrix,
+            data = self.df,
+            coupon_views = self.coupon_views,
+            division = 'LSG')
+
+    def test_coupon_to_sku(self):
+        # self.sales.show()
+        # self.matrix.show()
+        # self.df.show()
+        # self.coupon_views.show()
+        sku_mb = self.cvm_post.coupon_to_sku()
+        sku_mb.show()
+        self.assertEqual(0, 0)
+
+    def test_filtering_by_stats(self):
+        self.assertEqual(0, 0)
+
+    def test_lsg_filtering(self):
+        self.assertEqual(0, 0)
+
+    def test_ccg_filtering(self):
+        self.assertEqual(0, 0)
+
+    def test_lsg_formatting(self):
+        self.assertEqual(0, 0)
+
+    def test_ccg_formatting(self):
+        self.fail()
+
 
 
 if __name__ == '__main__':
