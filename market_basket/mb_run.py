@@ -1,5 +1,6 @@
 from utility_functions.benchmark import timer
 from pyspark.sql.functions import col, lit, countDistinct, rand
+from pyspark import StorageLevel
 from utility_functions.custom_errors import *
 from utility_functions.databricks_uf import rdd_to_df
 import numpy
@@ -11,7 +12,7 @@ if 'spark' not in locals():
     spark, sqlContext, setting = spark_init()
 
 module_logger = logging.getLogger('CVM.mb_run')
-
+sc = spark.sparkContext
 
 @timer
 def market_basket_proc(data):
@@ -27,9 +28,13 @@ def market_basket_sql(data):
         groupBy('coupon_key').\
         agg(countDistinct('basket_key').alias('basket_count'))
 
+    print(f'Before filtering by basket_count: {df.count()}')
+
     basket_counts = df.select('basket_count').toPandas()
-    basket_threshold = numpy.float64(numpy.percentile(basket_counts, 20)).item()
+    basket_threshold = max(numpy.float64(numpy.percentile(basket_counts, 20)).item(), 1)
     df = df.filter(col('basket_count') > lit(basket_threshold))
+
+    print(f'After filtering by basket_count: {df.count()}')
 
     df1 = data.join(df, ['coupon_key'], how='inner').alias('df1').\
         withColumnRenamed('basket_count', 'basket_count_X').\
@@ -61,8 +66,6 @@ def market_basket_sql(data):
     matrix = matrix.\
         withColumn('support', col('basket_count_XY')/lit(total_basket_count))
 
-    rec_count = matrix.count()
-
     conf_check_1 = matrix.filter(col('confidence') > 1.0).count()
     conf_check_2 = matrix.filter(col('confidence') < 0).count()
 
@@ -76,15 +79,9 @@ def market_basket_sql(data):
             f'Confidence should never be negative but there are {conf_check_2} records with negative confidence.'
         )
 
-    if 'local' in setting:
-        try:
-            matrix = matrix.collect()
-            matrix = rdd_to_df(matrix)
-        except:
-            print('Cannot collect matrix.')
+    matrix = matrix.cache()
 
-    else:
-        matrix = matrix.cache()
+    rec_count = matrix.count()
 
     module_logger.info(f'===== market_basket_sql : total_basket_count = {total_basket_count} ======')
     module_logger.info(f'===== market_basket_sql : total_rec_count = {rec_count} ======')
