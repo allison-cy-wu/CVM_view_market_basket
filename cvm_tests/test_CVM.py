@@ -17,7 +17,7 @@ class TestMarketBasketSql(TestCase):
         self.data = rdd_to_df(self.data)
         self.data.show()
 
-        self.total_basket_count, self.df, self.matrix = market_basket_sql(self.data)
+        self.total_basket_count, self.df, self.matrix = market_basket_sql(self.data, debug = True)
         self.matrix.orderBy(desc('basket_count_XY'), desc('coupon_key_X'), desc('coupon_key_Y')).show()
 
     def test_basket_count(self):
@@ -111,20 +111,32 @@ class TestCVMPostProcessing(TestCase):
         self.assertEqual(0, 0)
 
     def test_filtering_by_stats(self):
+        sku_mb = self.cvm_post.coupon_to_sku()
+        sku_mb_filtered = self.cvm_post.filtering_by_stats(sku_mb)
+        sku_mb_filtered.show()
         self.assertEqual(0, 0)
 
     def test_lsg_filtering(self):
-        self.assertEqual(0, 0)
+        sku_mb = self.cvm_post.coupon_to_sku()
+        sku_mb_filtered = self.cvm_post.filtering_by_stats(sku_mb)
+        sku_mb_filtered = self.cvm_post.lsg_filtering(sku_mb_filtered)
+        max_check = sku_mb_filtered.agg({'cvm_rank': 'max'}).collect()[0]['max(cvm_rank)']
+        self.assertLessEqual(max_check, 35)
 
     def test_ccg_filtering(self):
         self.assertEqual(0, 0)
 
     def test_lsg_formatting(self):
-        self.assertEqual(0, 0)
+        sku_mb = self.cvm_post.coupon_to_sku()
+        sku_mb_filtered = self.cvm_post.filtering_by_stats(sku_mb)
+        sku_mb_filtered = self.cvm_post.lsg_filtering(sku_mb_filtered)
+        sku_mb_formatted = self.cvm_post.lsg_formatting(sku_mb_filtered)
+        sku_mb_formatted.show()
+        count_check = sku_mb_formatted.groupby('sku_X').count().agg({'count': 'max'}).collect()[0]['max(count)']
+        self.assertLessEqual(count_check, 1)
 
     def test_ccg_formatting(self):
         self.fail()
-
 
 
 if __name__ == '__main__':
