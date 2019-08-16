@@ -1,10 +1,10 @@
 from utility_functions.date_period import date_period, bound_date_check
 from utility_functions.benchmark import timer
-from connect2Databricks.read2Databricks import redshift_cdw_read, redshift_ccg_read
+from connect2Databricks.read2Databricks import oracle_cdw_read
 from pyspark.sql.functions import split, explode
 from utility_functions.databricks_uf import clear_cache
 from pyspark.sql.functions import col, ltrim, rtrim, coalesce, countDistinct, desc, dense_rank, concat_ws, lit, \
-    row_number, broadcast
+    row_number, broadcast, collect_list
 from pyspark.sql.window import Window
 from utility_functions.databricks_uf import rdd_to_df
 import pyspark.sql.functions as func
@@ -40,6 +40,7 @@ class CVMPostProcessing:
         self.debug = debug
 
     def coupon_to_sku(self):
+        module_logger.info('===== cvm_post_processing.coupon_to_sku : START ======')
         # if self.debug:
         #     print(f'matrix row_counts: {self.matrix.count()}')
         sku_matrix = self.matrix. \
@@ -82,38 +83,48 @@ class CVMPostProcessing:
         sku_matrix = sku_matrix.\
             withColumn('cvm_score', col('sku_basket_count_Y')*col('confidence'))
 
-        sku_matrix.show()
-
         if self.debug:
             print(f'sku_matrix row_counts: {sku_matrix.count()}')
 
+        module_logger.info('===== cvm_post_processing.coupon_to_sku : END======')
         return sku_matrix
 
     @staticmethod
     def filtering_by_stats(sku_matrix):
+        module_logger.info('===== cvm_post_processing.filtering_by_stats : START ======')
         recs = sku_matrix.\
             filter(col('confidence') >= 0.2)
+        module_logger.info('===== cvm_post_processing.filtering_by_stats : END======')
         return recs
 
     @staticmethod
     def lsg_filtering(recs):
+        module_logger.info('===== cvm_post_processing.lsg_filtering : START ======')
         cvm_rank_window = Window.partitionBy('sku_X').orderBy(desc('cvm_score'), desc('sku_basket_count_Y'), desc(
             'sku_sales_Y'))
         recs = recs.\
             withColumn('cvm_rank', dense_rank().over(cvm_rank_window)).\
             filter(col('cvm_rank') <= 35)
+        module_logger.info('===== cvm_post_processing.lsg_filtering : END ======')
         return recs
 
     @staticmethod
     def ccg_filtering(recs):
+        module_logger.info('===== cvm_post_processing.ccg_filtering : START ======')
         recs = recs
+        module_logger.info('===== cvm_post_processing.ccg_filtering : END ======')
         return recs
 
     @staticmethod
     def lsg_formatting(recs):
-        formatted_recs = recs.select('sku_X', 'sku_Y').\
-            withColumn('sku_Y', concat_ws('|', 'sku_Y'))
+        module_logger.info('===== cvm_post_processing.lsg_formatting : START ======')
 
+        formatted_recs = recs.select('sku_X', 'sku_Y').\
+            groupby('sku_X').\
+            agg(concat_ws('|', collect_list(recs.sku_Y))).\
+            withColumnRenamed('concat_ws(|, collect_list(sku_Y))', 'recs')
+
+        module_logger.info('===== cvm_post_processing.lsg_formatting : END ======')
         return formatted_recs
 
     @staticmethod
@@ -131,6 +142,7 @@ def cvm_post_processing(
         division: str = 'LSG',
         debug: bool = False,
 ):
+    module_logger.info('===== cvm_post_processing : START ======')
     cvm_post = CVMPostProcessing(sales = sales,
                                  matrix = matrix,
                                  data = data,
@@ -151,7 +163,7 @@ def cvm_post_processing(
         raise InputNotValidError(
             f'Post-processing for Division {division} is not defined.'
         )
-
+    module_logger.info('===== cvm_post_processing : END ======')
     return sku_mb, sku_mb_filtered, sku_mb_formatted
 
 
@@ -165,9 +177,10 @@ def cvm_formatting_cdw(
         env: str = 'TST',
 
 ):
-    model_master = redshift_ccg_read(f'SELECT TOP 1 * FROM {model_master_name} ORDER BY master_id DESC',
-                                     database = 'CDWCMMO',
-                                     env = env).toPandas()
+    model_master = oracle_cdw_read(f'SELECT TOP 1 * FROM {model_master_name} ORDER BY master_id DESC',
+                                   database = 'CDWCMMO',
+                                   env = env,
+                                   db_type = 'Oracle').toPandas()
 
     master_id = model_master['master_id'][0].item() + 1
     start_date, end_date = date_period(-time_prd_val, start_date)

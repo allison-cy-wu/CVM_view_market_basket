@@ -1,6 +1,6 @@
 from utility_functions.date_period import date_period, bound_date_check
 from utility_functions.benchmark import timer
-from utility_functions.databricks_uf import collect_and_cache
+from utility_functions.databricks_uf import clone
 from utility_functions.custom_errors import *
 from connect2Databricks.read2Databricks import redshift_cdw_read
 from pyspark.sql.functions import split, explode, col, ltrim, rtrim, coalesce, countDistinct, broadcast
@@ -208,6 +208,7 @@ def cvm_pre_processing(
             filter(col('coupon_count') > 1). \
             filter(col('prod_count') > 1)
 
+    sessions_that_matter = clone(sessions_that_matter)
     df = df.join(broadcast(sessions_that_matter), ['session_key'], how = 'inner').\
         withColumnRenamed('session_key', 'basket_key')
 
