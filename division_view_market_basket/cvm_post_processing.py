@@ -177,43 +177,43 @@ def cvm_formatting_cdw(
         env: str = 'TST',
 
 ):
-    model_master = oracle_cdw_read(f'SELECT TOP 1 * FROM {model_master_name} ORDER BY master_id DESC',
+    model_master = oracle_cdw_read(f'SELECT MASTER_ID FROM {model_master_name} WHERE ROWNUM = 1'
+                                   f'ORDER BY master_id DESC',
                                    database = 'CDWCMMO',
                                    env = env,
                                    db_type = 'Oracle').toPandas()
-
-    master_id = model_master['master_id'][0].item() + 1
+    master_id = model_master['MASTER_ID'][0] + 1
     start_date, end_date = date_period(-time_prd_val, start_date)
     w = Window().orderBy('sku_X', 'cvm_rank')
     output = recs. \
-        withColumn('master_id', lit(master_id)). \
-        withColumn('record_id', row_number().over(w)). \
-        withColumn('time_prd_val', lit(time_prd_val)). \
-        withColumn('model_type', lit(model_type)). \
-        withColumn('model_name', lit(model_name)). \
-        withColumn('start_date', lit(start_date)). \
-        withColumn('end_date', lit(end_date))
+        withColumn('MASTER_ID', lit(master_id)). \
+        withColumn('RECORD_ID', row_number().over(w)). \
+        withColumn('TIME_PRD_VAL', lit(time_prd_val)). \
+        withColumn('MODEL_TYPE', lit(model_type)). \
+        withColumn('MODEL_NAME', lit(model_name)). \
+        withColumn('START_DATE', lit(start_date)). \
+        withColumn('END_DATE', lit(end_date))
 
     # Order the columns
     output = output. \
-        select('master_id',
-               'record_id',
-               'time_prd_val',
-               'model_type',
-               'model_name',
-               'sku_X',
-               'coupon_X',
-               'sku_Y',
-               'coupon_Y',
-               'basket_count_XY',
-               'sku_basket_count_X',
-               'sku_basket_count_Y',
-               'sku_sales_X',
-               'sku_sales_Y',
-               'confidence',
-               'cvm_rank',
-               'start_date',
-               'end_date',
+        select('MASTER_ID',
+               'RECORD_ID',
+               'TIME_PRD_VAL',
+               'MODEL_TYPE',
+               'MODEL_NAME',
+               'SKU_X',
+               'COUPON_X',
+               'SKU_Y',
+               'COUPON_Y',
+               'BASKET_COUNT_XY',
+               'SKU_BASKET_COUNT_X',
+               'SKU_BASKET_COUNT_Y',
+               'SKU_SALES_X',
+               'SKU_SALES_Y',
+               'CONFIDENCE',
+               'CVM_RANK',
+               'START_DATE',
+               'END_DATE',
 
                )
 
