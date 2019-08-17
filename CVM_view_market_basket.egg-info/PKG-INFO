@@ -1,0 +1,13 @@
+Metadata-Version: 1.1
+Name: CVM-view-market-basket
+Version: 1.0
+Summary: market basket core algorithm and web click data processing
+Home-page: UNKNOWN
+Author: Allison Wu
+Author-email: allison.wu@thermofisher.com
+License: UNKNOWN
+Description: # CVM_view_market_basket
+         View market basket 
+        
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3.7
