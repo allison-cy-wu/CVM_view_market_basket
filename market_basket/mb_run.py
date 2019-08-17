@@ -34,6 +34,7 @@ def market_basket_sql(data, debug: bool = False, t: int = 20):
     :return: total_basket_count, df, matrix
     """
     module_logger.info('===== market_basket_sql : START ======')
+    coupon_data = data.select('coupon_key', 'coupon', 'basket_key').distinct()
     total_basket_count = data.agg(countDistinct('basket_key'))
     total_basket_count = int(total_basket_count.toPandas()['count(DISTINCT basket_key)'][0])
     df = data.select('coupon_key', 'basket_key').\
@@ -49,7 +50,7 @@ def market_basket_sql(data, debug: bool = False, t: int = 20):
 
     print(f'After filtering by basket_count: {df.count()}')
 
-    df1 = data.join(df, ['coupon_key'], how='inner').alias('df1').\
+    df1 = coupon_data.join(df, ['coupon_key'], how='inner').alias('df1').\
         withColumnRenamed('basket_count', 'basket_count_X').\
         withColumnRenamed('coupon_key', 'coupon_key_X').\
         withColumnRenamed('coupon', 'coupon_X')
@@ -58,7 +59,7 @@ def market_basket_sql(data, debug: bool = False, t: int = 20):
         print(f'row counts for data: {data.count()}')
         print(f'row counts for df1: {df1.count()}')
 
-    df2 = data.join(df, ['coupon_key'], how='inner').alias('df2'). \
+    df2 = coupon_data.join(df, ['coupon_key'], how='inner').alias('df2'). \
         withColumnRenamed('basket_count', 'basket_count_Y'). \
         withColumnRenamed('coupon_key', 'coupon_key_Y').\
         withColumnRenamed('coupon', 'coupon_Y')
