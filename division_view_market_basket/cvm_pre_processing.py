@@ -6,6 +6,7 @@ from connect2Databricks.read2Databricks import redshift_cdw_read
 from pyspark.sql.functions import split, explode, col, ltrim, rtrim, coalesce, countDistinct, broadcast
 from pyspark.sql.window import Window
 import pyspark.sql.functions as func
+import pickle
 from connect2Databricks.spark_init import spark_init
 import logging
 
@@ -44,13 +45,16 @@ class MarketBasketPullHistory:
                 'VS.visit_session_key AS session_key, ' \
                 'HIT.post_visid_combined AS visit_id, ' \
                 'HIT.visit_return_count AS visit_number, ' \
-                'UPPER(TRIM(prod_list)) AS prod_list ' \
+                'UPPER(TRIM(prod_list)) AS prod_list, ' \
+                "TRIM(SUBSTRING(TRIM(DEMANDBASE), 0, POSITION('|' IN TRIM(DEMANDBASE)))) AS " \
+                "account_no " \
                 'FROM datalake_omni.omni_hit_data HIT ' \
                 'LEFT JOIN CDWDS.D_OMNI_VISIT_SESSION VS ON ' \
                 '  VS.VISIT_RETURN_COUNT=HIT.VISIT_RETURN_COUNT AND VS.POST_VISID_COMBINED=HIT.POST_VISID_COMBINED ' \
                 f'WHERE HIT.hit_time_gmt_dt_key<{start_date} AND HIT.hit_time_gmt_dt_key>={end_date} ' \
                 'AND HIT.post_visid_combined IS NOT NULL ' \
-                "AND prod_list IS NOT NULL AND prod_list NOT LIKE '%shipping-handling%'"
+                "AND prod_list IS NOT NULL AND prod_list NOT LIKE '%shipping-handling%' " \
+                "AND TRIM(SUBSTRING(TRIM(DEMANDBASE), 0, POSITION('|' IN TRIM(DEMANDBASE)))) <> '' "
 
         df = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env). \
             withColumn('prod_id_untrimmed', explode(split('prod_list', ','))). \
@@ -62,9 +66,23 @@ class MarketBasketPullHistory:
         if self.debug:
             print(f'row count for df = {df.count()}')
 
+        # find active products
+        query = 'SELECT	sku as prod_id, stk_type_cd '\
+                'FROM cdwds.lsg_prod_v ' \
+                "WHERE	stk_type_cd = 'D'"
+
+        discontinued_prods = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
+
+        df = df.join(discontinued_prods, ['prod_id'], how = 'left').\
+            filter(col('stk_type_cd').isNull()).\
+            drop('stk_type_cd')
+
+        if self.debug:
+            print(f'After filtering out discontinued SKUs, row count for df = {df.count()}')
+
         query = 'SELECT UPPER(sku_nbr) AS prod_id, size_grp AS coupon ' \
                 'FROM cdwds.f_web_prod_feature ' \
-                'WHERE size_grp IS NOT NULL ' \
+                "WHERE size_grp IS NOT NULL AND size_grp <> 'T' " \
                 'GROUP BY sku_nbr, size_grp'
 
         coupons = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
@@ -73,20 +91,18 @@ class MarketBasketPullHistory:
             raise DataValidityError('No coupon information.  Please check the validity of size_grp column '
                                     'on cdwds.f_web_prod_feature.')
 
-        if self.debug:
-            print(f'row count for coupons = {coupons.count()}')
-
-        coupons = coupons.\
-            withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
+        # coupons = coupons.\
+        #     withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
         df = df.join(broadcast(coupons), ['prod_id'], how = 'left').\
             withColumn('coupon', coalesce('coupon', 'prod_id')).\
             withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
-        # TODO: write test to check the integrity of df
-
         prod_list = df.select('prod_id').distinct()
         coupons = df.select('prod_id', 'coupon', 'coupon_key').distinct()
+
+        if self.debug:
+            print(f'row count for coupons = {coupons.select(col("coupon_key")).distinct().count()}')
 
         return df, prod_list, coupons
 
@@ -111,9 +127,11 @@ class MarketBasketPullHistory:
 
         query = 'SELECT '\
                 'UPPER(prod_prc_ref_sku) AS prod_id, sum(ext_net_sls_pmar_amt) AS sales ' \
-                'FROM cdwds.lsg_f_sls_invc ' \
+                'FROM cdwds.lsg_f_sls_invc I' \
+                'LEFT JOIN cdwds.lsg_prod_v P ON P.sku = prod_prc_ref_sku ' \
                 f'WHERE invc_dt_key<{start_date} AND invc_dt_key>={end_date} ' \
                 'AND UPPER(prod_prc_ref_sku) IS NOT NULL ' \
+                "AND P.stk_type_cd <> 'D' " \
                 f'GROUP BY UPPER(prod_prc_ref_sku)'
 
         sales = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
@@ -125,7 +143,8 @@ class MarketBasketPullHistory:
             print('Product list is not defined for pulling sales.')
 
         if coupons:
-            print(f'There are {coupons.count()} rows in coupons table.')
+            coupons_count = coupons.select("coupon_key").distinct().count()
+            print(f'There are {coupons_count} rows in coupons table.')
             sales = sales. \
                 join(broadcast(coupons), ['prod_id'], how = 'left'). \
                 withColumn('coupon', coalesce('coupon', 'prod_id'))
@@ -153,16 +172,20 @@ class MarketBasketPullHistory:
 
         sales = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env)
         if prod_list:
-            print(f'There are {prod_list.count()} products.')
+            if self.debug:
+                print(f'There are {prod_list.count()} products.')
+
             sales = sales.\
                 join(broadcast(prod_list), ['prod_id'], how='inner')
         else:
             print('Product list is not defined for pulling sales.')
 
         if coupons:
-            print(f'There are {coupons.count()} rows in coupons table.')
+            if self.debug:
+                print(f'There are {coupons.count()} rows in coupons table.')
+
             sales = sales. \
-                join(broadcast(coupons), ['prod_id'], how = 'left'). \
+                join(broadcast(coupons), ['prod_id'], how = 'leftsemi'). \
                 withColumn('coupon', coalesce('coupon', 'prod_id'))
         else:
             print('Coupons is not defined for pulling sales.')

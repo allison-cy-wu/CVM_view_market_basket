@@ -3,6 +3,7 @@ from utility_functions.databricks_uf import rdd_to_df
 from market_basket.mb_run import market_basket_sql, market_basket_stats
 from division_view_market_basket.cvm_pre_processing import MarketBasketPullHistory
 from division_view_market_basket.cvm_post_processing import CVMPostProcessing
+from decimal import *
 from pyspark.sql.functions import col, ltrim, rtrim, desc, countDistinct
 from connect2Databricks.spark_init import spark_init
 import pickle
@@ -61,22 +62,27 @@ class TestMarketBasketPullHistory(TestCase):
     def setUp(self):
         self.start_date = '20190710'
         self.period = -1
-        self.env = 'TST'
+        self.env = 'PRD'
+        with open('prod_list_test.pkl', 'rb') as f:
+            [self.prod_list, self.coupons] = pickle.load(f)
+
+        self.prod_list = rdd_to_df(self.prod_list)
+        self.coupons = rdd_to_df(self.coupons)
         self.pull_history = MarketBasketPullHistory(self.start_date, self.period, self.env)
 
     def test_lsg_omni(self):
-        df = self.pull_history()
-        df.show()
-        self.assertEqual(0,0)
+        df, _, _ = self.pull_history()
+        count_check = df.count()
+        self.assertLess(150000, count_check)
 
     def test_lsg_sales(self):
-        sales = self.pull_history.lsg_sales()
+        sales = self.pull_history.lsg_sales(self.prod_list, self.coupons)
         # sales.orderBy(desc('sales')).show()
-        sales_check_1 = sales.filter(col('prod_id') == 'RA2B2').select('sales').toPandas()['sales'][0]
+        sales_check_1 = sales.filter(col('prod_id') == '292805').select('sales').toPandas()['sales'][0]
         sales_check_2 = sales.count()
 
-        self.assertEqual(sales_check_1, 638580)
-        self.assertEqual(sales_check_2, 7697)
+        self.assertEqual(Decimal('476829.60'), sales_check_1)
+        self.assertEqual(6097, sales_check_2)
 
 
 class TestCVMPostProcessing(TestCase):
