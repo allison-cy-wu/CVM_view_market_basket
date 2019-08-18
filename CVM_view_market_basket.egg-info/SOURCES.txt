@@ -10,7 +10,6 @@ cvm_tests/test_CVM.py
 division_view_market_basket/__init__.py
 division_view_market_basket/cvm_post_processing.py
 division_view_market_basket/cvm_pre_processing.py
-division_view_market_basket/division_cvm.py
 division_view_market_basket/logger_config.py
 market_basket/__init__.py
 market_basket/mb_metrics.py
