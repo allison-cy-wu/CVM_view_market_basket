@@ -39,11 +39,18 @@ class CVMPostProcessing:
         self.division = division
         self.debug = debug
 
-    def coupon_to_sku(self):
+    def filtering_by_stats(self):
+        module_logger.info('===== cvm_post_processing.filtering_by_stats : START ======')
+        matrix_filtered = self.matrix.\
+            filter(col('confidence') >= 0.2)
+        module_logger.info('===== cvm_post_processing.filtering_by_stats : END======')
+        return matrix_filtered
+
+    def coupon_to_sku(self, matrix_filtered):
         module_logger.info('===== cvm_post_processing.coupon_to_sku : START ======')
         # if self.debug:
         #     print(f'matrix row_counts: {self.matrix.count()}')
-        sku_matrix = self.matrix. \
+        sku_matrix = matrix_filtered. \
             join(self.prod_views, self.matrix.coupon_key_X == self.prod_views.coupon_key, how = 'left'). \
             drop('coupon_key').\
             withColumnRenamed('sku_basket_count', 'sku_basket_count_X'). \
@@ -89,13 +96,6 @@ class CVMPostProcessing:
         module_logger.info('===== cvm_post_processing.coupon_to_sku : END======')
         return sku_matrix
 
-    @staticmethod
-    def filtering_by_stats(sku_matrix):
-        module_logger.info('===== cvm_post_processing.filtering_by_stats : START ======')
-        recs = sku_matrix.\
-            filter(col('confidence') >= 0.2)
-        module_logger.info('===== cvm_post_processing.filtering_by_stats : END======')
-        return recs
 
     @staticmethod
     def lsg_filtering(recs):
@@ -150,8 +150,8 @@ def cvm_post_processing(
                                  division = division,
                                  debug = debug)
 
-    sku_mb = cvm_post.coupon_to_sku()
-    sku_mb = cvm_post.filtering_by_stats(sku_mb)
+    matrix_filtered = cvm_post.filtering_by_stats()
+    sku_mb = cvm_post.coupon_to_sku(matrix_filtered)
 
     if division == 'LSG':
         sku_mb_filtered = cvm_post.lsg_filtering(sku_mb)
