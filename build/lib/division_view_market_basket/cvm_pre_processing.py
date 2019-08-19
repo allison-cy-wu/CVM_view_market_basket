@@ -152,8 +152,13 @@ class MarketBasketPullHistory:
             withColumnRenamed('sum(sales)', 'coupon_sales'). \
             filter(col('coupon_sales') > 0)
 
-        print(f'Total rows in SKU sales count: {sales.count()}')
-        print(f'Total number of coupons with sales: {coupon_sales.count()}')
+        if sales.count() == 0:
+            raise OutputOutOfBoundError('Sales count is 0. Check the data validity of cdwds.lsg_f_sls_invc.')
+
+        if self.debug:
+            print(f'Total rows in SKU sales count: {sales.count()}')
+            print(f'Total number of coupons with sales: {coupon_sales.count()}')
+
         return sales, coupon_sales
 
     @timer
