@@ -1,13 +1,12 @@
 from utility_functions.date_period import date_period, bound_date_check
 from utility_functions.benchmark import timer
 from connect2Databricks.read2Databricks import oracle_cdw_read
-from pyspark.sql.functions import split, explode
+
 from utility_functions.databricks_uf import clear_cache
 from pyspark.sql.functions import col, ltrim, rtrim, coalesce, countDistinct, desc, dense_rank, concat_ws, lit, \
     row_number, broadcast, collect_list
 from pyspark.sql.window import Window
-from utility_functions.databricks_uf import rdd_to_df
-import pyspark.sql.functions as func
+from utility_functions.databricks_uf import clone
 from utility_functions.custom_errors import *
 from connect2Databricks.spark_init import spark_init
 import logging
@@ -24,7 +23,8 @@ class CVMPostProcessing:
                  data,
                  matrix,
                  coupon_views,
-                 division:str = 'LSG',
+                 coupon_sales,
+                 division: str = 'LSG',
                  debug: bool = True,
                  ):
         clear_cache()
@@ -36,6 +36,7 @@ class CVMPostProcessing:
             agg(countDistinct('basket_key')).\
             withColumnRenamed('count(DISTINCT basket_key)', 'sku_basket_count')
         self.coup_views = coupon_views
+        self.coup_sales = coupon_sales
         self.division = division
         self.debug = debug
 
@@ -50,8 +51,12 @@ class CVMPostProcessing:
         module_logger.info('===== cvm_post_processing.coupon_to_sku : START ======')
         # if self.debug:
         #     print(f'matrix row_counts: {self.matrix.count()}')
+
+        matrix_filtered = matrix_filtered.\
+            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coupon_sales.coupon_key, how = 'leftsemi')
+
         sku_matrix = matrix_filtered. \
-            join(self.prod_views, self.matrix.coupon_key_X == self.prod_views.coupon_key, how = 'left'). \
+            join(self.prod_views, matrix_filtered.coupon_key_X == self.prod_views.coupon_key, how = 'left'). \
             drop('coupon_key').\
             withColumnRenamed('sku_basket_count', 'sku_basket_count_X'). \
             withColumnRenamed('prod_id', 'sku_X'). \
@@ -79,7 +84,7 @@ class CVMPostProcessing:
             print(f'sku_matrix row_counts: {sku_matrix.count()}')
             sku_matrix.show()
 
-        sku_matrix = spark.createDataFrame(sku_matrix.rdd, sku_matrix.schema)
+        sku_matrix = clone(sku_matrix)
 
         sku_matrix = sku_matrix.\
             join(self.sales, sku_matrix.sku_Y == self.sales.prod_id, how = 'left'). \
@@ -95,7 +100,6 @@ class CVMPostProcessing:
 
         module_logger.info('===== cvm_post_processing.coupon_to_sku : END======')
         return sku_matrix
-
 
     @staticmethod
     def lsg_filtering(recs):
@@ -173,7 +177,7 @@ def cvm_formatting_cdw(
         model_name: str,
         model_type: str,
         start_date: str,
-        time_prd_val: int = 7,
+        time_prd_val: int = -7,
         env: str = 'TST',
 
 ):
@@ -183,7 +187,7 @@ def cvm_formatting_cdw(
                                    env = env,
                                    db_type = 'Oracle').toPandas()
     master_id = model_master['MASTER_ID'][0] + 1
-    start_date, end_date = date_period(-time_prd_val, start_date)
+    start_date, end_date = date_period(time_prd_val, start_date)
     w = Window().orderBy('sku_X', 'cvm_rank')
     output = recs. \
         withColumn('MASTER_ID', lit(master_id)). \

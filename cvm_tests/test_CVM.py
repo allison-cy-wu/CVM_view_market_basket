@@ -72,6 +72,7 @@ class TestMarketBasketPullHistory(TestCase):
 
     def test_lsg_omni(self):
         df, _, _ = self.pull_history()
+        df.show()
         count_check = df.count()
         self.assertLess(150000, count_check)
 

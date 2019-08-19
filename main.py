@@ -32,7 +32,7 @@ def cvm_pipeline(
     write_env = 'TST'
     logger.info('===== cvm_pipeline : START ======')
     start_date, end_date = date_period(period, start_date)
-    _, sales, df = cvm_pre_processing(
+    _, sales, coupon_sales, df = cvm_pre_processing(
         start_date = start_date,
         period = period,
         env = env,
@@ -47,6 +47,7 @@ def cvm_pipeline(
         matrix = matrix,
         data = df,
         coupon_views = coupon_views,
+        coupon_sales = coupon_sales,
         division = division,
         debug = debug,
     )
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     cvm_pipeline(env = 'PRD',
                  table_name = 'cdwcmmo.cvm_databricks_test',
                  start_date = '',
-                 period = -180,
+                 period = -1,
                  division = 'LSG',
                  debug = True,)
     logger.info('==== CVM : END ====')

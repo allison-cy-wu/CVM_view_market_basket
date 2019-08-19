@@ -91,15 +91,12 @@ class MarketBasketPullHistory:
             raise DataValidityError('No coupon information.  Please check the validity of size_grp column '
                                     'on cdwds.f_web_prod_feature.')
 
-        # coupons = coupons.\
-        #     withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
-
         df = df.join(broadcast(coupons), ['prod_id'], how = 'left').\
-            withColumn('coupon', coalesce('coupon', 'prod_id')).\
-            withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
+            withColumn('coupon', coalesce('coupon', 'prod_id'))
 
         prod_list = df.select('prod_id').distinct()
-        coupons = df.select('prod_id', 'coupon', 'coupon_key').distinct()
+        coupons = coupons.union(df.select('prod_id', 'coupon').distinct()).\
+            withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
         if self.debug:
             print(f'row count for coupons = {coupons.select(col("coupon_key")).distinct().count()}')
@@ -190,8 +187,13 @@ class MarketBasketPullHistory:
         else:
             print('Coupons is not defined for pulling sales.')
 
-        print(f'sales count: {sales.count()}')
-        return sales
+        coupon_sales = sales.groupby('coupon', 'coupon_key').agg({'sum': 'sales'}). \
+            withColumnRenamed('sum(sales)', 'coupon_sales').\
+            filter(col('coupon_sales') > 0)
+
+        print(f'Total rows in SKU sales count: {sales.count()}')
+        print(f'Total number of coupons with sales: {coupon_sales.count()}')
+        return sales, coupon_sales
 
 
 @timer
@@ -208,10 +210,10 @@ def cvm_pre_processing(
     pull_history = MarketBasketPullHistory(start_date, period, env, debug = debug)
     if division == 'LSG':
         df, prod_list, coupons = pull_history.lsg_omni()
-        sales = pull_history.lsg_sales(prod_list, coupons)
+        sales, coupon_sales = pull_history.lsg_sales(prod_list, coupons)
     else:
         df, prod_list, coupons = pull_history.ccg_omni()
-        sales = pull_history.ccg_sales(prod_list, coupons)
+        sales, coupon_sales = pull_history.ccg_sales(prod_list, coupons)
 
     # find scraper sessions: sessions with more than 30 clicks
     if df:
@@ -235,17 +237,12 @@ def cvm_pre_processing(
     df = df.join(broadcast(sessions_that_matter), ['session_key'], how = 'inner').\
         withColumnRenamed('session_key', 'basket_key')
 
-    module_logger.info('===== cvm_pre_processing : caching the pre-processed data ======')
-
-    # df = collect_and_cache(df)
-    # sales = collect_and_cache(sales)
-
     sales_count = sales.count()
     row_count = df.count()
 
     module_logger.info(f'===== cvm_pre_processing : total_row_count for df = {row_count} ======')
     module_logger.info(f'===== cvm_pre_processing : number of SKUs with sales = {sales_count} ======')
     module_logger.info('===== cvm_pre_processing : END ======')
-    return sessions_that_matter, sales, df
+    return sessions_that_matter, sales, coupon_sales, df
 
 
