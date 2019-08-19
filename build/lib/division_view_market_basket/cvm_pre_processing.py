@@ -98,6 +98,9 @@ class MarketBasketPullHistory:
         coupons = coupons.union(df.select('prod_id', 'coupon').distinct()).\
             withColumn("coupon_key", func.dense_rank().over(Window.orderBy('coupon')))
 
+        df = df.join(coupons, ['prod_id', 'coupon'], how = 'leftsemi')
+        df = clone(df)
+
         if self.debug:
             print(f'row count for coupons = {coupons.select(col("coupon_key")).distinct().count()}')
 
