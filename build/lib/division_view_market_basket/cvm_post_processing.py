@@ -44,6 +44,7 @@ class CVMPostProcessing:
         module_logger.info('===== cvm_post_processing.filtering_by_stats : START ======')
         matrix_filtered = self.matrix.\
             filter(col('confidence') >= 0.2)
+        module_logger.info(f'===== cvm_post_processing.filtering_by_stats : total rec count = {matrix_filtered.count()}======')
         module_logger.info('===== cvm_post_processing.filtering_by_stats : END======')
         return matrix_filtered
 
@@ -54,8 +55,8 @@ class CVMPostProcessing:
 
         # remove coupons with no sales
         matrix_filtered = matrix_filtered.\
-            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coupon_sales.coupon_key, how = 'inner').\
-            join(self.coup_sales, matrix_filtered.coupon_key_X == self.coupon_sales.coupon_key, how = 'inner').\
+            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coup_sales.coupon_key, how = 'inner').\
+            join(self.coup_sales, matrix_filtered.coupon_key_X == self.coup_sales.coupon_key, how = 'inner').\
             distinct()
 
         sku_matrix = matrix_filtered. \
