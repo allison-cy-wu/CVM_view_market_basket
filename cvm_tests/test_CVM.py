@@ -77,13 +77,15 @@ class TestMarketBasketPullHistory(TestCase):
         self.assertLess(150000, count_check)
 
     def test_lsg_sales(self):
-        sales = self.pull_history.lsg_sales(self.prod_list, self.coupons)
+        sales, coupon_sales = self.pull_history.lsg_sales(self.prod_list, self.coupons)
         # sales.orderBy(desc('sales')).show()
         sales_check_1 = sales.filter(col('prod_id') == '292805').select('sales').toPandas()['sales'][0]
         sales_check_2 = sales.count()
+        coupon_sales_check_1 = coupon_sales.filter(col('coupon_sales') == 0).count()
 
         self.assertEqual(Decimal('476829.60'), sales_check_1)
         self.assertEqual(6097, sales_check_2)
+        self.assertEqual(0, coupon_sales_check_1)
 
 
 class TestCVMPostProcessing(TestCase):

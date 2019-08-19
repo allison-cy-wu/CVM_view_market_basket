@@ -187,7 +187,7 @@ class MarketBasketPullHistory:
                 print(f'There are {coupons.count()} rows in coupons table.')
 
             sales = sales. \
-                join(broadcast(coupons), ['prod_id'], how = 'leftsemi'). \
+                join(broadcast(coupons), ['prod_id'], how = 'inner'). \
                 withColumn('coupon', coalesce('coupon', 'prod_id'))
         else:
             print('Coupons is not defined for pulling sales.')
