@@ -17,7 +17,6 @@ class TestMarketBasketSql(TestCase):
 
         self.data = rdd_to_df(self.data)
         self.data.show()
-
         self.total_basket_count, self.df, self.matrix = market_basket_sql(self.data, debug = True)
         self.matrix.orderBy(desc('basket_count_XY'), desc('coupon_key_X'), desc('coupon_key_Y')).show()
 
@@ -71,7 +70,7 @@ class TestMarketBasketPullHistory(TestCase):
         self.pull_history = MarketBasketPullHistory(self.start_date, self.period, self.env)
 
     def test_lsg_omni(self):
-        df, _, _ = self.pull_history()
+        df, _, _ = self.pull_history.lsg_omni()
         df.show()
         count_check = df.count()
         self.assertLess(150000, count_check)
