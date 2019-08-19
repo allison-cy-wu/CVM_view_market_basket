@@ -147,6 +147,7 @@ def cvm_post_processing(
         matrix,
         data,
         coupon_views,
+        coupon_sales,
         division: str = 'LSG',
         debug: bool = False,
 ):
@@ -155,6 +156,7 @@ def cvm_post_processing(
                                  matrix = matrix,
                                  data = data,
                                  coupon_views = coupon_views,
+                                 coupon_sales = coupon_sales,
                                  division = division,
                                  debug = debug)
 
