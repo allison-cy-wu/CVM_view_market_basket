@@ -154,7 +154,7 @@ class MarketBasketPullHistory:
 
         print(f'Total rows in SKU sales count: {sales.count()}')
         print(f'Total number of coupons with sales: {coupon_sales.count()}')
-        return sales
+        return sales, coupon_sales
 
     @timer
     def ccg_sales(self, prod_list, coupons):
