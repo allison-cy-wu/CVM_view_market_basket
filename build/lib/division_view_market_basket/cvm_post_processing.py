@@ -52,8 +52,11 @@ class CVMPostProcessing:
         # if self.debug:
         #     print(f'matrix row_counts: {self.matrix.count()}')
 
+        # remove coupons with no sales
         matrix_filtered = matrix_filtered.\
-            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coupon_sales.coupon_key, how = 'leftsemi')
+            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coupon_sales.coupon_key, how = 'inner').\
+            join(self.coup_sales, matrix_filtered.coupon_key_X == self.coupon_sales.coupon_key, how = 'inner').\
+            distinct()
 
         sku_matrix = matrix_filtered. \
             join(self.prod_views, matrix_filtered.coupon_key_X == self.prod_views.coupon_key, how = 'left'). \
