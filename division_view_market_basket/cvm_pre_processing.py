@@ -192,8 +192,8 @@ class MarketBasketPullHistory:
         else:
             print('Coupons is not defined for pulling sales.')
 
-        coupon_sales = sales.groupby('coupon', 'coupon_key').agg({'sum': 'sales'}). \
-            withColumnRenamed('sum(sales)', 'coupon_sales').\
+        coupon_sales = sales.groupby('coupon', 'coupon_key').agg({'sales': 'sum'}). \
+            withColumnRenamed('sum(sales)', 'coupon_sales'). \
             filter(col('coupon_sales') > 0)
 
         print(f'Total rows in SKU sales count: {sales.count()}')
