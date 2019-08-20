@@ -1,7 +1,6 @@
 from utility_functions.date_period import date_period, bound_date_check
 from utility_functions.benchmark import timer
 from connect2Databricks.read2Databricks import oracle_cdw_read
-
 from utility_functions.databricks_uf import clear_cache
 from pyspark.sql.functions import col, ltrim, rtrim, coalesce, countDistinct, desc, dense_rank, concat_ws, lit, \
     row_number, broadcast, collect_list
@@ -27,16 +26,16 @@ class CVMPostProcessing:
                  division: str = 'LSG',
                  debug: bool = True,
                  ):
-        clear_cache()
-        self.sales = sales
+        self.sales = clone(sales.select('prod_id', 'sales').distinct())
         self.matrix = matrix
         self.data = data
         self.prod_views = data.\
             groupBy('prod_id', 'coupon_key').\
             agg(countDistinct('basket_key')).\
             withColumnRenamed('count(DISTINCT basket_key)', 'sku_basket_count')
-        self.coup_views = coupon_views
-        self.coup_sales = coupon_sales
+        self.prod_views = clone(self.prod_views)
+        self.coup_views = clone(coupon_views)
+        self.coup_sales = clone(coupon_sales.select('coupon_key', 'coupon_sales'))
         self.division = division
         self.debug = debug
 
@@ -54,32 +53,46 @@ class CVMPostProcessing:
         #     print(f'matrix row_counts: {self.matrix.count()}')
 
         # remove coupons with no sales
-        matrix_filtered = matrix_filtered.\
-            join(self.coup_sales, matrix_filtered.coupon_key_Y == self.coup_sales.coupon_key, how = 'inner').\
-            join(self.coup_sales, matrix_filtered.coupon_key_X == self.coup_sales.coupon_key, how = 'inner').\
-            distinct()
+        coup_sales_X = self.coup_sales.alias('coup_sales_X')
+        coup_sales_Y = self.coup_sales.alias('coup_sales_Y')
 
+        matrix_filtered = matrix_filtered. \
+            join(broadcast(coup_sales_X), matrix_filtered.coupon_key_X == coup_sales_X.coupon_key,
+                 how = 'inner').distinct()
+        matrix_filtered = clone(matrix_filtered).cache()
+        matrix_filtered = matrix_filtered. \
+            join(broadcast(coup_sales_Y), matrix_filtered.coupon_key_Y == coup_sales_Y.coupon_key,
+                 how = 'inner').distinct()
+
+        matrix_filtered = clone(matrix_filtered).cache()
+
+        # Append SKU basket counts
         sku_matrix = matrix_filtered. \
-            join(self.prod_views, matrix_filtered.coupon_key_X == self.prod_views.coupon_key, how = 'left'). \
+            join(broadcast(self.prod_views), matrix_filtered.coupon_key_X == self.prod_views.coupon_key,
+                 how = 'left'). \
             drop('coupon_key').\
             withColumnRenamed('sku_basket_count', 'sku_basket_count_X'). \
             withColumnRenamed('prod_id', 'sku_X'). \
             fillna({'sku_basket_count_X': 0})
 
         sku_matrix = sku_matrix.\
-            join(self.prod_views, sku_matrix.coupon_key_Y == self.prod_views.coupon_key, how = 'left'). \
+            join(broadcast(self.prod_views), sku_matrix.coupon_key_Y == self.prod_views.coupon_key, how = 'left'). \
             drop('coupon_key'). \
             withColumnRenamed('sku_basket_count', 'sku_basket_count_Y'). \
             withColumnRenamed('prod_id', 'sku_Y'). \
             fillna({'sku_basket_count_Y': 0})
+
+        sku_matrix = clone(sku_matrix).cache()
 
         if self.debug:
             print(f'sku_matrix row_counts: {sku_matrix.count()}')
             sku_matrix.show()
             self.sales.show()
 
+        # Append SKU sales
         sku_matrix = sku_matrix.\
-            join(self.sales.select('prod_id', 'sales'), sku_matrix.sku_X == self.sales.prod_id, how = 'left').\
+            join(self.sales, sku_matrix.sku_X == self.sales.prod_id, how = 'left').\
+            drop('prod_id').\
             withColumnRenamed('sales', 'sku_sales_X').\
             fillna({'sku_sales_X': 0})
 
@@ -87,12 +100,13 @@ class CVMPostProcessing:
             print(f'sku_matrix row_counts: {sku_matrix.count()}')
             sku_matrix.show()
 
-        sku_matrix = clone(sku_matrix)
-
         sku_matrix = sku_matrix.\
-            join(self.sales.select('prod_id', 'sales'), sku_matrix.sku_Y == self.sales.prod_id, how = 'left'). \
+            join(self.sales, sku_matrix.sku_Y == self.sales.prod_id, how = 'left'). \
+            drop('prod_id'). \
             withColumnRenamed('sales', 'sku_sales_Y').\
             fillna({'sku_sales_Y': 0})
+
+        sku_matrix = clone(sku_matrix)
 
         sku_matrix = sku_matrix.\
             withColumn('cvm_score', col('sku_basket_count_Y')*col('confidence'))
