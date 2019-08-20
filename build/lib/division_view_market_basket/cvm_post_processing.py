@@ -79,8 +79,7 @@ class CVMPostProcessing:
             self.sales.show()
 
         sku_matrix = sku_matrix.\
-            join(self.sales, sku_matrix.sku_X == self.sales.prod_id, how = 'left').\
-            drop('coupon', 'prod_id', 'coupon_key').\
+            join(self.sales.select('prod_id', 'sales'), sku_matrix.sku_X == self.sales.prod_id, how = 'left').\
             withColumnRenamed('sales', 'sku_sales_X').\
             fillna({'sku_sales_X': 0})
 
@@ -91,8 +90,7 @@ class CVMPostProcessing:
         sku_matrix = clone(sku_matrix)
 
         sku_matrix = sku_matrix.\
-            join(self.sales, sku_matrix.sku_Y == self.sales.prod_id, how = 'left'). \
-            drop('coupon', 'prod_id', 'coupon_key').\
+            join(self.sales.select('prod_id', 'sales'), sku_matrix.sku_Y == self.sales.prod_id, how = 'left'). \
             withColumnRenamed('sales', 'sku_sales_Y').\
             fillna({'sku_sales_Y': 0})
 
