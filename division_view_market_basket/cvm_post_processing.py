@@ -35,7 +35,7 @@ class CVMPostProcessing:
             withColumnRenamed('count(DISTINCT basket_key)', 'sku_basket_count')
         self.prod_views = clone(self.prod_views)
         self.coup_views = clone(coupon_views)
-        self.coup_sales = clone(coupon_sales.select('coupon_key', 'coupon_sales'))
+        self.coup_sales = clone(coupon_sales.select('coupon_key'))
         self.division = division
         self.debug = debug
 
@@ -58,11 +58,15 @@ class CVMPostProcessing:
 
         matrix_filtered = matrix_filtered. \
             join(broadcast(coup_sales_X), matrix_filtered.coupon_key_X == coup_sales_X.coupon_key,
-                 how = 'inner').distinct()
+                 how = 'inner').\
+            drop('coupon_sales').\
+            distinct()
         matrix_filtered = clone(matrix_filtered).cache()
         matrix_filtered = matrix_filtered. \
             join(broadcast(coup_sales_Y), matrix_filtered.coupon_key_Y == coup_sales_Y.coupon_key,
-                 how = 'inner').distinct()
+                 how = 'inner'). \
+            drop('coupon_sales'). \
+            distinct()
 
         matrix_filtered = clone(matrix_filtered).cache()
 
