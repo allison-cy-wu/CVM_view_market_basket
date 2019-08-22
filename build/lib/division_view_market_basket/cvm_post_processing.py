@@ -232,6 +232,8 @@ def cvm_formatting_cdw(
                'SKU_Y',
                'COUPON_Y',
                'BASKET_COUNT_XY',
+               'BASKET_COUNT_X',
+               'BASKET_COUNT_Y',
                'SKU_BASKET_COUNT_X',
                'SKU_BASKET_COUNT_Y',
                'SKU_SALES_X',
