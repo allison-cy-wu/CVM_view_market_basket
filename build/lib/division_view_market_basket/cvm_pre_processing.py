@@ -4,6 +4,7 @@ from utility_functions.databricks_uf import clone
 from utility_functions.custom_errors import *
 from connect2Databricks.read2Databricks import redshift_cdw_read
 from pyspark.sql.functions import split, explode, col, ltrim, rtrim, coalesce, countDistinct, broadcast
+from pyspark.sql.types import StructField, StringType, DecimalType, DateType, IntegerType, TimestampType, StructType
 from pyspark.sql.window import Window
 import pyspark.sql.functions as func
 import pickle
@@ -56,7 +57,16 @@ class MarketBasketPullHistory:
                 "AND prod_list IS NOT NULL AND prod_list NOT LIKE '%shipping-handling%' " \
                 "AND TRIM(SUBSTRING(TRIM(DEMANDBASE), 0, POSITION('|' IN TRIM(DEMANDBASE)))) <> '' "
 
-        df = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env). \
+        schema = StructType([
+            StructField('session_key', IntegerType(), True),
+            StructField('visit_id', StringType(), True),
+            StructField('visit_number', IntegerType(), True),
+            # StructField('time_stamp', TimestampType(), True),
+            StructField('prod_list', StringType(), True),
+            StructField('account_no', StringType(), True),
+        ])
+
+        df = redshift_cdw_read(query, db_type = 'RS', database = 'CDWDS', env = self.env, schema = schema). \
             withColumn('prod_id_untrimmed', explode(split('prod_list', ','))). \
             withColumn('prod_id', ltrim(rtrim(col('prod_id_untrimmed')))). \
             drop('prod_id_untrimmed'). \
