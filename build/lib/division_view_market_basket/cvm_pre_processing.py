@@ -62,7 +62,7 @@ class MarketBasketPullHistory:
             StructField('session_key', IntegerType(), True),
             StructField('visit_id', StringType(), True),
             StructField('visit_number', IntegerType(), True),
-            StructField('time_stamp', TimestampType(), True),
+            StructField('time_stamp', StringType(), True),
             StructField('prod_list', StringType(), True),
             StructField('account_no', StringType(), True),
         ])
