@@ -1,4 +1,5 @@
 from unittest import TestCase
+import unittest
 from utility_functions.databricks_uf import rdd_to_df
 from market_basket.mb_run import market_basket_sql, market_basket_stats
 from division_view_market_basket.cvm_pre_processing import MarketBasketPullHistory
@@ -147,6 +148,6 @@ class TestCVMPostProcessing(TestCase):
 
 
 if __name__ == '__main__':
-    test_CVM.main()
+    unittest.main()
 
 
