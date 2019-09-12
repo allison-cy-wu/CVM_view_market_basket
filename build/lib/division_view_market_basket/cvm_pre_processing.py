@@ -47,6 +47,7 @@ class MarketBasketPullHistory:
                 'HIT.post_visid_combined AS visit_id, ' \
                 'HIT.visit_return_count AS visit_number, ' \
                 'UPPER(TRIM(prod_list)) AS prod_list, ' \
+                'HIT.hit_time_gmt_ts AS time_stamp, ' \
                 "TRIM(SUBSTRING(TRIM(DEMANDBASE), 0, POSITION('|' IN TRIM(DEMANDBASE)))) AS " \
                 "account_no " \
                 'FROM datalake_omni.omni_hit_data HIT ' \
@@ -61,7 +62,7 @@ class MarketBasketPullHistory:
             StructField('session_key', IntegerType(), True),
             StructField('visit_id', StringType(), True),
             StructField('visit_number', IntegerType(), True),
-            # StructField('time_stamp', TimestampType(), True),
+            StructField('time_stamp', TimestampType(), True),
             StructField('prod_list', StringType(), True),
             StructField('account_no', StringType(), True),
         ])
