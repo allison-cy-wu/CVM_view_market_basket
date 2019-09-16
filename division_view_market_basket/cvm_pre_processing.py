@@ -72,6 +72,8 @@ class MarketBasketPullHistory:
             withColumn('prod_id', ltrim(rtrim(col('prod_id_untrimmed')))). \
             drop('prod_id_untrimmed'). \
             drop('prod_list'). \
+            filter(col('prod_id').isNotNull()). \
+            filter(col('prod_id') != ''). \
             distinct()
 
         if self.debug:
